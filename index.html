@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Ruleta Gira y Gana</title>
+
+<style>
+body {
+    background: radial-gradient(circle, #0f2027, #203a43, #2c5364);
+    color: white;
+    text-align: center;
+    font-family: Arial, sans-serif;
+    margin: 0;
+}
+
+/* HEADER RESPONSIVE */
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    padding: 20px;
+}
+
+.logo {
+    width: 150px;
+}
+
+/* RULETA */
+.contenedor {
+    position: relative;
+    display: inline-block;
+}
+
+canvas {
+    margin-top: 20px;
+    border-radius: 50%;
+    box-shadow: 0 0 25px rgba(0,0,0,0.5);
+}
+
+.flecha {
+    position: absolute;
+    bottom: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 15px solid transparent;
+    border-right: 15px solid transparent;
+    border-top: 30px solid white;
+}
+
+button {
+    margin-top: 20px;
+    padding: 15px 40px;
+    font-size: 18px;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    background: linear-gradient(45deg, red, blue);
+    color: white;
+}
+
+/* PANEL */
+.panel {
+    margin-top: 20px;
+}
+
+input {
+    margin: 5px;
+    padding: 5px;
+}
+
+/* RESPONSIVE */
+@media (max-width: 600px) {
+    .header {
+        flex-direction: column;
+    }
+
+    .logo {
+        width: 180px;
+    }
+
+    h1 {
+        font-size: 22px;
+        margin: 0;
+    }
+
+    canvas {
+        width: 280px;
+        height: 280px;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div class="header">
+    <img src="logo santacruz.png" class="logo">
+    <h1>🎁 Juega y gana</h1>
+</div>
+
+<div class="contenedor">
+    <canvas id="ruleta" width="350" height="350"></canvas>
+    <div class="flecha"></div>
+</div>
+
+<br>
+<button onclick="girar()">Girar</button>
+
+<!-- PANEL SIMPLE -->
+<div class="panel" id="panel" style="display:none;">
+    <h3>Editar premios</h3>
+    <input id="p0" placeholder="Premio 1">
+    <input id="p1" placeholder="Premio 2">
+    <input id="p2" placeholder="Premio 3">
+    <input id="p3" placeholder="Premio 4">
+    <br>
+    <button onclick="actualizarPremios()">Actualizar</button>
+</div>
+
+<script>
+const canvas = document.getElementById("ruleta");
+const ctx = canvas.getContext("2d");
+
+let premios = [
+    "Envío Gratis",
+    "10% OFF",
+    "Sigue intentando",
+    "20% OFF",
+    "Nada 😢",
+    "50% OFF",
+    "2x1",
+    "Premio sorpresa"
+];
+
+const colores = ["#ff0000", "#0044ff"];
+
+let angulo = 0;
+let girando = false;
+
+// 🔊 sonido
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playClick() {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.frequency.value = 1000;
+    osc.type = "square";
+
+    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.05);
+}
+
+// 🎯 PROBABILIDADES
+function elegirPremio() {
+    const probabilidades = [0.08,0.15,0.20,0.15,0.15,0.07,0.10,0.10];
+    let r = Math.random();
+    let suma = 0;
+
+    for (let i = 0; i < probabilidades.length; i++) {
+        suma += probabilidades[i];
+        if (r <= suma) return i;
+    }
+    return probabilidades.length - 1;
+}
+
+function dibujarRuleta() {
+    const total = premios.length;
+    const anguloPorSeccion = (2 * Math.PI) / total;
+
+    for (let i = 0; i < total; i++) {
+        ctx.beginPath();
+        ctx.moveTo(175, 175);
+        ctx.arc(175, 175, 170,
+            angulo + i * anguloPorSeccion,
+            angulo + (i + 1) * anguloPorSeccion
+        );
+
+        ctx.fillStyle = colores[i % 2];
+        ctx.fill();
+
+        ctx.strokeStyle = "#fff";
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(175, 175);
+        ctx.rotate(angulo + (i + 0.5) * anguloPorSeccion);
+        ctx.textAlign = "right";
+        ctx.fillStyle = "#fff";
+        ctx.fillText(premios[i], 150, 5);
+        ctx.restore();
+    }
+
+    ctx.beginPath();
+    ctx.arc(175, 175, 40, 0, 2 * Math.PI);
+    ctx.fillStyle = "#111";
+    ctx.fill();
+}
+
+// 🔄 GIRO
+function girar() {
+    if (girando) return;
+
+    const hoy = new Date().toDateString();
+    const ultimoUso = localStorage.getItem("fechaGiro");
+
+    if (ultimoUso === hoy) {
+        alert("Ya usaste tu intento hoy");
+        return;
+    }
+
+    girando = true;
+
+    const total = premios.length;
+    const anguloPorSeccion = (2 * Math.PI) / total;
+
+    let premioIndex = elegirPremio();
+
+    let objetivo = (premioIndex * anguloPorSeccion) + (anguloPorSeccion / 2);
+    objetivo = (2 * Math.PI) - objetivo;
+
+    let vueltas = 8;
+    let destino = objetivo + (vueltas * 2 * Math.PI);
+
+    let velocidad = 0.7;
+    let ultimoClick = 0;
+
+    const animar = () => {
+        velocidad *= 0.985;
+        angulo += velocidad;
+
+        if (Math.floor(angulo * 10) !== ultimoClick) {
+            playClick();
+            ultimoClick = Math.floor(angulo * 10);
+        }
+
+        if (angulo >= destino) {
+            angulo = destino;
+            girando = false;
+            localStorage.setItem("fechaGiro", hoy);
+            animacionFinal();
+            return;
+        }
+
+        ctx.clearRect(0, 0, 350, 350);
+        dibujarRuleta();
+        requestAnimationFrame(animar);
+    };
+
+    animar();
+}
+
+// ✨ ANIMACIÓN FINAL
+function animacionFinal() {
+    let escala = 1;
+    let creciendo = true;
+
+    const animarCentro = () => {
+        ctx.clearRect(0, 0, 350, 350);
+        dibujarRuleta();
+
+        ctx.save();
+        ctx.translate(175, 175);
+        ctx.scale(escala, escala);
+        ctx.beginPath();
+        ctx.arc(0, 0, 40, 0, 2 * Math.PI);
+        ctx.fillStyle = "#00ffcc";
+        ctx.fill();
+        ctx.restore();
+
+        if (creciendo) {
+            escala += 0.02;
+            if (escala >= 1.2) creciendo = false;
+        } else {
+            escala -= 0.02;
+            if (escala <= 1) return;
+        }
+
+        requestAnimationFrame(animarCentro);
+    };
+
+    animarCentro();
+}
+
+// 🎛️ PANEL
+function actualizarPremios() {
+    for (let i = 0; i < 4; i++) {
+        let val = document.getElementById("p" + i).value;
+        if (val) premios[i] = val;
+    }
+    dibujarRuleta();
+}
+
+dibujarRuleta();
+
+// 🔐 ACTIVADOR SECRETO
+let clave = "";
+
+document.addEventListener("keydown", (e) => {
+    clave += e.key.toLowerCase();
+
+    if (clave.includes("admin")) {
+        document.getElementById("panel").style.display = "block";
+        alert("Modo administrador activado");
+        clave = "";
+    }
+
+    // evitar que crezca infinito
+    if (clave.length > 10) {
+        clave = clave.slice(-10);
+    }
+});
+</script>
+
+</body>
+</html>
